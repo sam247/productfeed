@@ -4,6 +4,7 @@ import { client } from '@/utils/apolloClient';
 import { prisma } from '@/utils/db';
 import { FeedValidator, validateFeed } from '@/utils/feedValidation';
 import FeedMonitor from '@/utils/feedMonitoring';
+import { FeedVersionManager } from '@/utils/feedVersionManager';
 
 interface FeedSettings {
   country: string;
@@ -105,12 +106,25 @@ export async function GET(
 
     // Validate products
     const validationResults = await validateFeed(products, (progress) => {
-      // Update progress in monitor
       monitor.updateProgress(progress);
     });
 
     // Generate feed only with valid products
     const xml = generateXML(validationResults.validProducts, feed.settings);
+
+    // Create new feed version
+    await FeedVersionManager.createVersion(
+      params.id,
+      xml,
+      'XML',
+      {
+        totalProducts: products.length,
+        validProducts: validationResults.validProducts.length,
+        invalidProducts: validationResults.invalidProducts.length,
+        errors: validationResults.errors,
+        warnings: validationResults.warnings,
+      }
+    );
 
     // Update feed stats in database
     await prisma.feed.update({

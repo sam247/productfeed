@@ -22,19 +22,39 @@ model Shop {
 }
 
 model Feed {
-  id        String   @id @default(cuid())
-  shopId    String
-  shop      Shop     @relation(fields: [shopId], references: [id])
+  id        String        @id @default(cuid())
   name      String
   settings  Json
   url       String
   lastSync  DateTime?
-  status    String   @default("active")
-  stats     Json?    // Stores validation results and feed generation statistics
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status    String       @default("active")
+  shopId    String
+  shop      Shop         @relation(fields: [shopId], references: [id])
+  stats     Json?        // Stores validation results and feed generation statistics
+  versions  FeedVersion[] // Relation to feed versions
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   @@index([shopId])
+}
+
+model FeedVersion {
+  id          String    @id @default(cuid())
+  feedId      String
+  feed        Feed      @relation(fields: [feedId], references: [id])
+  version     Int       // Incremental version number
+  content     String    // The actual feed content (XML, CSV, etc.)
+  format      String    // Feed format (XML, CSV, TSV)
+  stats       Json      // Validation stats and metrics
+  status      String    @default("active") // active, archived, rolled_back
+  createdAt   DateTime  @default(now())
+  createdBy   String?   // User or system that created this version
+  rollbackFrom String?  // ID of the version this was rolled back from, if applicable
+  note        String?   // Optional note about this version
+
+  @@index([feedId])
+  @@index([feedId, version])
+  @@index([feedId, status])
 }
 
 model Billing {
