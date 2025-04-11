@@ -1,3 +1,5 @@
+'use client';
+
 import { Page, Layout, Card, DataTable, Button, Banner, Loading, Toast, Checkbox } from "@shopify/polaris";
 import { useState, useEffect, useCallback } from "react";
 import { gql, useQuery, useApolloClient } from "@apollo/client";
