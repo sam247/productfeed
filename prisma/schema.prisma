@@ -8,14 +8,14 @@ datasource db {
 }
 
 model Shop {
-  id        String   @id @default(cuid())
-  shop      String   @unique
+  id          String   @id @default(cuid())
+  shop        String   @unique
   accessToken String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tier      String   @default("Starter")
-  feeds     Feed[]
-  payments  Payment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tier        String   @default("Starter")
+  feeds       Feed[]
+  billings    Billing[]
 }
 
 model Feed {
@@ -31,14 +31,15 @@ model Feed {
   updatedAt DateTime @updatedAt
 }
 
-model Payment {
-  id        String   @id @default(cuid())
-  shopId    String
-  shop      Shop     @relation(fields: [shopId], references: [id])
-  amount    Float
-  currency  String   @default("USD")
-  status    String   @default("pending")
-  tier      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Billing {
+  id            String   @id @default(cuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id])
+  chargeId      String   @unique
+  tier          String
+  status        String   @default("pending")
+  confirmationUrl String?
+  test         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 } 
