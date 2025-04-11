@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Providers } from '@/components/Providers'
+import { AppProvider, Frame } from '@shopify/polaris'
+import '@shopify/polaris/build/esm/styles.css'
+import { ApolloProvider } from '@apollo/client'
+import { apolloClient } from '@/lib/apollo'
+import enTranslations from '@shopify/polaris/locales/en.json'
 
 export const metadata: Metadata = {
   title: 'Product Feed Manager',
@@ -19,7 +23,13 @@ export default function RootLayout({
         <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <AppProvider i18n={enTranslations}>
+          <ApolloProvider client={apolloClient}>
+            <Frame>
+              {children}
+            </Frame>
+          </ApolloProvider>
+        </AppProvider>
       </body>
     </html>
   )
