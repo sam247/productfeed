@@ -6,7 +6,7 @@ const httpLink = createHttpLink({
     'http://localhost:3000/graphql',
 });
 
-export const apolloClient = new ApolloClient({
+export const client = new ApolloClient({
   link: httpLink,
   cache: new InMemoryCache(),
 }); 
