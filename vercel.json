@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "env": {
+    "NEXT_PUBLIC_APP_URL": "WILL_BE_SET_BY_VERCEL",
+    "DATABASE_URL": "WILL_BE_SET_IN_VERCEL_DASHBOARD",
+    "STRIPE_SECRET_KEY": "WILL_BE_SET_IN_VERCEL_DASHBOARD",
+    "STRIPE_WEBHOOK_SECRET": "WILL_BE_SET_IN_VERCEL_DASHBOARD",
+    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "WILL_BE_SET_IN_VERCEL_DASHBOARD"
+  }
+} 
