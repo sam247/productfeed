@@ -7,7 +7,7 @@ import { SyncSettings } from "@/components/SyncSettings";
 
 const GET_PRODUCTS = gql`
   query GetProducts($collectionId: ID) {
-    products(first: 50, query: $collectionId ? "collection_id:" + $collectionId : "") {
+    products(first: 50, query: $collectionId ? "collection_id:\\\"" + $collectionId + "\\\"" : "") {
       edges {
         node {
           id
