@@ -1,15 +1,11 @@
-import type { Metadata } from 'next'
-import './globals.css'
-import { AppProvider, Frame } from '@shopify/polaris'
-import '@shopify/polaris/build/esm/styles.css'
-import { ApolloProvider } from '@apollo/client'
-import { apolloClient } from '@/lib/apollo'
-import enTranslations from '@shopify/polaris/locales/en.json'
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Product Feed Manager',
-  description: 'Manage your Shopify product feeds for Google Merchant Center',
-}
+import { AppProvider, Frame } from '@shopify/polaris';
+import '@shopify/polaris/build/esm/styles.css';
+import { ApolloProvider } from '@apollo/client';
+import { apolloClient } from '@/lib/apollo';
+import enTranslations from '@shopify/polaris/locales/en.json';
+import './globals.css';
 
 export default function RootLayout({
   children,
@@ -32,5 +28,5 @@ export default function RootLayout({
         </AppProvider>
       </body>
     </html>
-  )
+  );
 }
