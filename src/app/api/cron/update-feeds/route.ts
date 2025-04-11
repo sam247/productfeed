@@ -4,8 +4,11 @@ import { gql } from '@apollo/client';
 import { client } from '@/utils/apolloClient';
 
 const GET_PRODUCTS = gql`
-  query GetProducts($collectionId: ID, $first: Int) {
-    products(first: $first, query: $collectionId ? "collection_id:" + $collectionId : "") {
+  query GetProducts($collectionId: ID, $first: Int!) {
+    products(
+      first: $first
+      query: $collectionId
+    ) {
       edges {
         node {
           id
@@ -74,7 +77,7 @@ export async function GET(request: Request) {
         // Get products based on feed settings
         const variables: any = { first: 100 }; // Default limit
         if (settings.collectionId) {
-          variables.collectionId = settings.collectionId;
+          variables.collectionId = `collection_id:${settings.collectionId}`;
         }
 
         const { data } = await client.query({
