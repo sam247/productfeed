@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { gql } from '@apollo/client';
 import { client } from '@/utils/apolloClient';
+import { prisma } from '@/utils/db';
 
 interface FeedSettings {
   country: string;
@@ -175,4 +176,23 @@ function generateTSV(products: any[]): string {
     )
   ];
   return rows.join('\n');
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await prisma.feed.delete({
+      where: { id: params.id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete feed:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete feed' },
+      { status: 500 }
+    );
+  }
 } 

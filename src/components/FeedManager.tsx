@@ -1,4 +1,4 @@
-import { Card, Button, Text, Banner, Box, Select, TextField, ChoiceList } from "@shopify/polaris";
+import { Card, Button, Text, Banner, Box, Select, TextField, ChoiceList, ProgressBar } from "@shopify/polaris";
 import { useState, useEffect } from "react";
 import { PricingTiers } from "./PricingTiers";
 
@@ -31,6 +31,16 @@ interface PricingTier {
   features: string[];
 }
 
+interface TierUsage {
+  products: number;
+  feeds: number;
+  limits: {
+    productLimit: number;
+    feedLimit: number;
+    productsPerFeedLimit: number;
+  };
+}
+
 const DEFAULT_TIER: PricingTier = {
   name: "Starter",
   price: 9.99,
@@ -60,7 +70,9 @@ const LANGUAGES = {
 export function FeedManager() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [currentTier, setCurrentTier] = useState<PricingTier>(DEFAULT_TIER);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<TierUsage | null>(null);
   const [newFeed, setNewFeed] = useState<Partial<Feed>>({
     settings: {
       country: 'GB',
@@ -74,33 +86,51 @@ export function FeedManager() {
     }
   });
 
+  // Load feeds and usage on mount
   useEffect(() => {
-    // Load current tier from localStorage or API
-    const savedTier = localStorage.getItem('currentTier');
-    if (savedTier) {
-      setCurrentTier(JSON.parse(savedTier));
-    }
+    loadFeeds();
   }, []);
+
+  const loadFeeds = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/feed');
+      if (!response.ok) throw new Error('Failed to load feeds');
+      const data = await response.json();
+      setFeeds(data.feeds);
+      setUsage(data.usage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load feeds');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!newFeed.name || !newFeed.settings) return;
 
-    // Check feed limit
-    if (feeds.length >= currentTier.feedLimit) {
-      alert(`You've reached the limit of ${currentTier.feedLimit} feeds for your current plan.`);
-      return;
-    }
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const feed: Feed = {
-        id: crypto.randomUUID(),
-        name: newFeed.name,
-        settings: newFeed.settings as Feed['settings'],
-        url: `/api/feed/${crypto.randomUUID()}`,
-        lastSync: null,
-        status: 'active',
-      };
+      const response = await fetch('/api/feed/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newFeed.name,
+          settings: newFeed.settings,
+          shopId: 'current', // This will be handled by the API middleware
+        }),
+      });
 
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create feed');
+      }
+
+      const feed = await response.json();
       setFeeds([...feeds, feed]);
       setIsCreating(false);
       setNewFeed({
@@ -115,26 +145,66 @@ export function FeedManager() {
           metafieldMappings: {},
         }
       });
-    } catch (error) {
-      console.error('Failed to create feed:', error);
+      
+      // Refresh usage data
+      loadFeeds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create feed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDelete = (id: string) => {
-    setFeeds(feeds.filter(feed => feed.id !== id));
-  };
+  const handleDelete = async (id: string) => {
+    try {
+      const response = await fetch(`/api/feed/${id}`, {
+        method: 'DELETE',
+      });
 
-  const handleTierSelect = (tier: PricingTier) => {
-    setCurrentTier(tier);
-    localStorage.setItem('currentTier', JSON.stringify(tier));
+      if (!response.ok) {
+        throw new Error('Failed to delete feed');
+      }
+
+      setFeeds(feeds.filter(feed => feed.id !== id));
+      // Refresh usage data
+      loadFeeds();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete feed');
+    }
   };
 
   return (
     <div className="space-y-6">
-      <PricingTiers 
-        currentTier={currentTier.name}
-        onSelectTier={handleTierSelect}
-      />
+      {usage && (
+        <Card>
+          <Box padding="400">
+            <Text variant="headingMd" as="h2">Resource Usage</Text>
+            <div className="space-y-4 mt-4">
+              <div>
+                <div className="flex justify-between mb-2">
+                  <Text as="p">Feeds ({usage.feeds}/{usage.limits.feedLimit})</Text>
+                  <Text as="p">{Math.round((usage.feeds / usage.limits.feedLimit) * 100)}%</Text>
+                </div>
+                <ProgressBar
+                  progress={Math.min((usage.feeds / usage.limits.feedLimit) * 100, 100)}
+                  tone={usage.feeds >= usage.limits.feedLimit ? "critical" : "highlight"}
+                />
+              </div>
+              
+              <div>
+                <div className="flex justify-between mb-2">
+                  <Text as="p">Products ({usage.products}/{usage.limits.productLimit})</Text>
+                  <Text as="p">{Math.round((usage.products / usage.limits.productLimit) * 100)}%</Text>
+                </div>
+                <ProgressBar
+                  progress={Math.min((usage.products / usage.limits.productLimit) * 100, 100)}
+                  tone={usage.products >= usage.limits.productLimit ? "critical" : "highlight"}
+                />
+              </div>
+            </div>
+          </Box>
+        </Card>
+      )}
 
       <Card>
         <Box padding="400">
@@ -142,11 +212,17 @@ export function FeedManager() {
             <Text variant="headingMd" as="h2">Feed Management</Text>
             <Button 
               onClick={() => setIsCreating(true)}
-              disabled={feeds.length >= currentTier.feedLimit}
+              disabled={isLoading || (usage?.feeds || 0) >= (usage?.limits.feedLimit || 0)}
             >
               Create New Feed
             </Button>
           </div>
+
+          {error && (
+            <Banner tone="critical" onDismiss={() => setError(null)}>
+              <p>{error}</p>
+            </Banner>
+          )}
 
           {feeds.length === 0 ? (
             <Banner tone="info">
@@ -255,7 +331,7 @@ export function FeedManager() {
               />
 
               <div className="flex gap-2">
-                <Button onClick={handleSave}>Save Feed</Button>
+                <Button onClick={handleSave} loading={isLoading}>Save Feed</Button>
                 <Button tone="critical" onClick={() => setIsCreating(false)}>
                   Cancel
                 </Button>

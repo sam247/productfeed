@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { gql } from '@apollo/client';
 import { client } from '@/utils/apolloClient';
+import { prisma } from '@/utils/db';
 
 interface Product {
   id: string;
@@ -23,6 +24,21 @@ interface Product {
       };
     }>;
   };
+}
+
+interface BaseFeed {
+  id: string;
+  shopId: string;
+  name: string;
+  settings: {
+    productIds?: string[];
+    [key: string]: any;
+  };
+  url: string;
+  lastSync: Date | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const GET_PRODUCTS = gql`
@@ -86,90 +102,43 @@ const GET_PRODUCTS_BY_IDS = gql`
 `;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const collectionId = searchParams.get('collectionId');
-  const productIds = searchParams.get('productIds')?.split(',');
-  const feedId = searchParams.get('feedId');
-  
   try {
-    // Default product limit
-    const productLimit = 100;
-
-    let query = GET_PRODUCTS;
-    let variables: any = { first: productLimit };
-
-    if (collectionId) {
-      variables.collectionId = `collection_id:${collectionId}`;
-    } else if (productIds?.length) {
-      query = GET_PRODUCTS_BY_IDS;
-      variables.ids = productIds.slice(0, productLimit);
-    }
-
-    const { data } = await client.query({
-      query,
-      variables,
+    // Get the current shop's feeds
+    const shop = await prisma.shop.findFirst({
+      include: {
+        feeds: true,
+      },
     });
 
-    const products = collectionId 
-      ? data.products.edges.map(({ node }: { node: Product }) => ({
-          id: node.id,
-          title: node.title,
-          handle: node.handle,
-          vendor: node.vendor,
-          imageUrl: node.images.edges[0]?.node.url,
-          price: node.variants.edges[0]?.node.price,
-          sku: node.variants.edges[0]?.node.sku,
-          barcode: node.variants.edges[0]?.node.barcode,
-        }))
-      : data.nodes.map((node: Product) => ({
-          id: node.id,
-          title: node.title,
-          handle: node.handle,
-          vendor: node.vendor,
-          imageUrl: node.images.edges[0]?.node.url,
-          price: node.variants.edges[0]?.node.price,
-          sku: node.variants.edges[0]?.node.sku,
-          barcode: node.variants.edges[0]?.node.barcode,
-        }));
+    if (!shop) {
+      return NextResponse.json(
+        { error: 'Shop not found' },
+        { status: 404 }
+      );
+    }
 
-    // If we hit the product limit, add a warning
-    const warning = products.length >= productLimit 
-      ? `<!-- Warning: Product limit of ${productLimit} reached. Upgrade your plan for more products. -->`
-      : '';
+    // Calculate current usage
+    const currentProducts = (shop.feeds as BaseFeed[]).reduce((total: number, feed: BaseFeed) => {
+      return total + (feed.settings.productIds?.length || 0);
+    }, 0);
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
-  <channel>
-    <title>Shopify Product Feed</title>
-    <link>${process.env.NEXT_PUBLIC_SHOPIFY_SHOP_DOMAIN}</link>
-    <description>Product feed for Google Merchant Center</description>
-    ${warning}
-    ${products.map((product: any) => `
-    <item>
-      <g:id>${product.id}</g:id>
-      <g:title>${product.title}</g:title>
-      <g:brand>${product.vendor}</g:brand>
-      <g:link>https://${process.env.NEXT_PUBLIC_SHOPIFY_SHOP_DOMAIN}/products/${product.handle}</g:link>
-      <g:image_link>${product.imageUrl}</g:image_link>
-      <g:price>${product.price} USD</g:price>
-      <g:mpn>${product.sku || ''}</g:mpn>
-      <g:gtin>${product.barcode || ''}</g:gtin>
-    </item>
-    `).join('')}
-  </channel>
-</rss>`;
-
-    return new NextResponse(xml, {
-      headers: {
-        'Content-Type': 'application/xml',
-        'Cache-Control': 'public, max-age=3600',
+    return NextResponse.json({
+      feeds: shop.feeds,
+      usage: {
+        products: currentProducts,
+        feeds: shop.feeds.length,
+        limits: {
+          productLimit: shop.productLimit,
+          feedLimit: shop.feedLimit,
+          productsPerFeedLimit: shop.productsPerFeedLimit,
+        },
       },
     });
   } catch (error) {
-    console.error('Feed generation error:', error);
-    return new NextResponse(JSON.stringify({ error: 'Failed to generate feed' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    console.error('Failed to list feeds:', error);
+    return NextResponse.json(
+      { error: 'Failed to list feeds' },
+      { status: 500 }
+    );
   }
 } 
