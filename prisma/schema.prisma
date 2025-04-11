@@ -30,8 +30,11 @@ model Feed {
   url       String
   lastSync  DateTime?
   status    String   @default("active")
+  stats     Json?    // Stores validation results and feed generation statistics
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([shopId])
 }
 
 model Billing {

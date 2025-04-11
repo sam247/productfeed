@@ -11,7 +11,12 @@
   },
   "dependencies": {
     "@apollo/client": "^3.8.10",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.57.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
     "@prisma/client": "^5.10.2",
+    "@sentry/nextjs": "^9.12.0",
     "@shopify/app-bridge-react": "^4.1.2",
     "@shopify/polaris": "^12.10.0",
     "@shopify/shopify-api": "^8.1.1",
@@ -19,9 +24,11 @@
     "graphql": "^16.8.1",
     "next": "14.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@sentry/types": "^9.12.0",
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",

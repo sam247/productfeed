@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { gql } from '@apollo/client';
 import { client } from '@/utils/apolloClient';
 import { prisma } from '@/utils/db';
+import { FeedValidator, validateFeed } from '@/utils/feedValidation';
+import FeedMonitor from '@/utils/feedMonitoring';
 
 interface FeedSettings {
   country: string;
@@ -52,22 +54,24 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // In a real app, fetch feed settings from database
-    const feedSettings: FeedSettings = {
-      country: 'GB',
-      language: 'en',
-      currency: 'GBP',
-      format: 'XML',
-      updateFrequency: 'daily',
-      includeVariants: true,
-      customAttributes: {},
-      metafieldMappings: {},
-    };
+    // Initialize feed monitor
+    const monitor = new FeedMonitor(params.id, 'current', 0, 'XML');
+
+    // Fetch feed settings and validate request
+    const feed = await prisma.feed.findUnique({
+      where: { id: params.id },
+      include: { shop: true }
+    });
+
+    if (!feed) {
+      return NextResponse.json({ error: 'Feed not found' }, { status: 404 });
+    }
 
     const { searchParams } = new URL(request.url);
     const productIds = searchParams.get('productIds')?.split(',');
     const collectionId = searchParams.get('collectionId');
 
+    // Fetch products from Shopify
     const { data } = await client.query({
       query: GET_PRODUCTS,
       variables: {
@@ -76,54 +80,77 @@ export async function GET(
       },
     });
 
+    // Transform products into the format expected by the validator
     const products = data.nodes.map((node: any) => ({
       id: node.id,
       title: node.title,
       description: node.description,
       link: `https://${process.env.NEXT_PUBLIC_SHOPIFY_SHOP_DOMAIN}/products/${node.handle}`,
       imageLink: node.images.edges[0]?.node.url,
-      price: `${node.variants.edges[0]?.node.price} ${feedSettings.currency}`,
+      price: `${node.variants.edges[0]?.node.price} ${feed.settings.currency}`,
       brand: node.vendor,
       gtin: node.variants.edges[0]?.node.barcode || '',
       mpn: node.variants.edges[0]?.node.sku || '',
       condition: 'new',
       availability: 'in stock',
       // Add custom attributes
-      ...Object.entries(feedSettings.customAttributes).reduce((acc, [key, value]) => ({
+      ...Object.entries(feed.settings.customAttributes).reduce((acc, [key, value]) => ({
         ...acc,
         [key]: value,
       }), {}),
     }));
 
-    switch (feedSettings.format) {
-      case 'CSV':
-        return new NextResponse(generateCSV(products), {
-          headers: {
-            'Content-Type': 'text/csv',
-            'Content-Disposition': `attachment; filename="feed-${params.id}.csv"`,
-          },
-        });
-      case 'TSV':
-        return new NextResponse(generateTSV(products), {
-          headers: {
-            'Content-Type': 'text/tab-separated-values',
-            'Content-Disposition': `attachment; filename="feed-${params.id}.tsv"`,
-          },
-        });
-      default:
-        return new NextResponse(generateXML(products, feedSettings), {
-          headers: {
-            'Content-Type': 'application/xml',
-            'Cache-Control': 'public, max-age=3600',
-          },
-        });
-    }
-  } catch (error) {
-    console.error('Feed generation failed:', error);
-    return new NextResponse(JSON.stringify({ error: 'Failed to generate feed' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+    // Update monitor with total product count
+    monitor.updateTotalProducts(products.length);
+
+    // Validate products
+    const validationResults = await validateFeed(products, (progress) => {
+      // Update progress in monitor
+      monitor.updateProgress(progress);
     });
+
+    // Generate feed only with valid products
+    const xml = generateXML(validationResults.validProducts, feed.settings);
+
+    // Update feed stats in database
+    await prisma.feed.update({
+      where: { id: params.id },
+      data: {
+        lastSync: new Date(),
+        stats: {
+          totalProducts: products.length,
+          validProducts: validationResults.validProducts.length,
+          invalidProducts: validationResults.invalidProducts.length,
+          errors: validationResults.errors,
+          warnings: validationResults.warnings,
+        },
+      },
+    });
+
+    // Complete monitoring
+    monitor.complete();
+
+    // Return appropriate response based on validation results
+    if (validationResults.invalidProducts.length > 0) {
+      return NextResponse.json({
+        xml,
+        validation: {
+          hasErrors: true,
+          validProducts: validationResults.validProducts.length,
+          invalidProducts: validationResults.invalidProducts.length,
+          errors: validationResults.errors,
+          warnings: validationResults.warnings,
+        },
+      }, { status: 206 }); // Partial Content
+    }
+
+    return NextResponse.json({ xml });
+  } catch (error: any) {
+    console.error('Error generating feed:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to generate feed' },
+      { status: 500 }
+    );
   }
 }
 
