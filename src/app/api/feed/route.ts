@@ -26,8 +26,8 @@ interface Product {
 }
 
 const GET_PRODUCTS = gql`
-  query GetProducts($collectionId: ID, $first: Int) {
-    products(first: $first, query: $collectionId ? "collection_id:" + $collectionId : "") {
+  query GetProducts($collectionId: String, $first: Int!) {
+    products(first: $first, query: $collectionId) {
       edges {
         node {
           id
@@ -56,6 +56,35 @@ const GET_PRODUCTS = gql`
   }
 `;
 
+const GET_PRODUCTS_BY_IDS = gql`
+  query GetProductsByIds($ids: [ID!]!, $first: Int!) {
+    nodes(ids: $ids) {
+      ... on Product {
+        id
+        title
+        handle
+        vendor
+        images(first: 1) {
+          edges {
+            node {
+              url
+            }
+          }
+        }
+        variants(first: 1) {
+          edges {
+            node {
+              price
+              sku
+              barcode
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const collectionId = searchParams.get('collectionId');
@@ -63,45 +92,16 @@ export async function GET(request: Request) {
   const feedId = searchParams.get('feedId');
   
   try {
-    // Get current tier from localStorage or API
-    const currentTier = JSON.parse(localStorage.getItem('currentTier') || '{"productLimit": 100}');
-    const productLimit = currentTier.productLimit;
+    // Default product limit
+    const productLimit = 100;
 
     let query = GET_PRODUCTS;
     let variables: any = { first: productLimit };
 
     if (collectionId) {
-      variables.collectionId = collectionId;
+      variables.collectionId = `collection_id:${collectionId}`;
     } else if (productIds?.length) {
-      // Create a query for specific products
-      query = gql`
-        query GetProductsByIds($ids: [ID!]!, $first: Int) {
-          nodes(ids: $ids) {
-            ... on Product {
-              id
-              title
-              handle
-              vendor
-              images(first: 1) {
-                edges {
-                  node {
-                    url
-                  }
-                }
-              }
-              variants(first: 1) {
-                edges {
-                  node {
-                    price
-                    sku
-                    barcode
-                  }
-                }
-              }
-            }
-          }
-        }
-      `;
+      query = GET_PRODUCTS_BY_IDS;
       variables.ids = productIds.slice(0, productLimit);
     }
 
@@ -166,6 +166,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    console.error('Feed generation error:', error);
     return new NextResponse(JSON.stringify({ error: 'Failed to generate feed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
